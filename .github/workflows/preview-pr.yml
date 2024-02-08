@@ -1,0 +1,69 @@
+name: Preview Pull Request
+run-name: Preview ${{ github.ref_name }}
+
+on:
+  push:
+    branches:
+      - trunk-merge/**
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  preview-api:
+    runs-on: ubuntu-latest
+    name: Pulumi Preview API
+    environment: pulumi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out urlup-be
+        uses: actions/checkout@v4
+        with:
+          repository: matt-fff/urlup-be
+          path: backend
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build lambdas
+        run: |
+          cd backend/src/urlup_be/lambdas
+          bash update_layer.sh
+
+      - name: Pulumi Login
+        run: pulumi login --non-interactive >/dev/null 2>&1
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Check out urlup-be-infra
+        uses: actions/checkout@v4
+        with:
+          repository: matt-fff/urlup-be-infra
+          path: infra
+
+      - name: Build Infrastructure
+        run: pip install -r infra/requirements.txt
+
+      - name: AWS Authentication
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-session-name: gha-deploy
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Pulumi Preview
+        run: |
+          cd infra 
+          pulumi stack select -c \
+            --stack "${STACK}"
+          pulumi preview --non-interactive
+        env:
+          STACK: codefold/urlup-aws-backend/dev

@@ -1,0 +1,8 @@
+environment:
+  - urlup-be-dev
+config:
+  usage:
+    period_limit: 3000
+    period_type: DAY
+    rate_limit: 60
+    burst_limit: 300
