@@ -1,0 +1,6 @@
+name: urlup-aws-backend
+runtime:
+  name: python
+  options:
+    virtualenv: .venv
+description: Backend and infrastructure for urlup link shortener

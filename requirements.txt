@@ -1,0 +1,4 @@
+pulumi==3.103.1
+pulumi-aws==6.18.2
+pulumi-aws-apigateway==2.1.1
+setuptools==69.0.3
