@@ -44,9 +44,7 @@ def api_usage_plan(
     return plan_key
 
 
-def lambdas(
-    conf: pulumi.Config, dynamo_table
-) -> dict[str, aws.lambda_.Function]:
+def lambdas(conf: pulumi.Config, dynamo_table) -> dict[str, aws.lambda_.Function]:
     lambdas_dir = "../backend/src/urlup_be/lambdas"
     tags = conf.get_object("tags")
 
@@ -64,9 +62,7 @@ def lambdas(
             }]
         }""",
         tags=tags,
-        managed_policy_arns=[
-            aws.iam.ManagedPolicy.AWS_LAMBDA_BASIC_EXECUTION_ROLE
-        ],
+        managed_policy_arns=[aws.iam.ManagedPolicy.AWS_LAMBDA_BASIC_EXECUTION_ROLE],
     )
 
     policy_document = dynamo_table.arn.apply(
