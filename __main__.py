@@ -44,28 +44,10 @@ def api_usage_plan(
     return plan_key
 
 
-def lambdas(conf: pulumi.Config, dynamo_table) -> dict[str, aws.lambda_.Function]:
-    lambdas_dir = "../backend/src/urlup_be/lambdas"
+def lambda_role(conf: pulumi.Config, dynamo_table: aws.dynamodb.Table) -> aws.iam.Role:
     tags = conf.get_object("tags")
 
-    # Create an IAM role that the Lambda function can assume
-    lambda_role = aws.iam.Role(
-        "lambdaRole",
-        assume_role_policy="""{
-            "Version": "2012-10-17",
-            "Statement": [{
-                "Action": "sts:AssumeRole",
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": "lambda.amazonaws.com"
-                }
-            }]
-        }""",
-        tags=tags,
-        managed_policy_arns=[aws.iam.ManagedPolicy.AWS_LAMBDA_BASIC_EXECUTION_ROLE],
-    )
-
-    policy_document = dynamo_table.arn.apply(
+    dynamo_policy_doc = dynamo_table.arn.apply(
         lambda arn: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -85,18 +67,42 @@ def lambdas(conf: pulumi.Config, dynamo_table) -> dict[str, aws.lambda_.Function
         )
     )
 
-    dynamo_policy = aws.iam.Policy(
-        "dynamoTablePolicy",
-        policy=policy_document,
+    assume_role_policy_doc = aws.iam.get_policy_document(
+        statements=[
+            aws.iam.GetPolicyDocumentStatementArgs(
+                effect="Allow",
+                principals=[
+                    aws.iam.GetPolicyDocumentStatementPrincipalArgs(
+                        type="Service",
+                        identifiers=["lambda.amazonaws.com"],
+                    )
+                ],
+                actions=["sts:AssumeRole"],
+            )
+        ]
+    )
+
+    # Create an IAM role that the Lambda function can assume
+    lambda_role = aws.iam.Role(
+        "lambdaRole",
+        assume_role_policy=assume_role_policy_doc.json,
+        inline_policies=[
+            aws.iam.RoleInlinePolicyArgs(
+                name="dynamoTablePolicy", policy=dynamo_policy_doc
+            )
+        ],
+        managed_policy_arns=[aws.iam.ManagedPolicy.AWS_LAMBDA_BASIC_EXECUTION_ROLE],
         tags=tags,
     )
 
-    # Attach the policy to the role.
-    aws.iam.RolePolicyAttachment(
-        "dynamoRoleAttachment",
-        role=lambda_role.name,
-        policy_arn=dynamo_policy.arn,
-    )
+    return lambda_role
+
+
+def lambdas(
+    conf: pulumi.Config, dynamo_table: aws.dynamodb.Table
+) -> dict[str, aws.lambda_.Function]:
+    lambdas_dir = conf.get("lambdas_dir") or "../backend/src/urlup_be/lambdas"
+    tags = conf.get_object("tags")
 
     dependencies_layer = aws.lambda_.LayerVersion(
         "lambdaDependenciesLayer",
@@ -108,7 +114,7 @@ def lambdas(conf: pulumi.Config, dynamo_table) -> dict[str, aws.lambda_.Function
     )
 
     lambda_kwargs = dict(
-        role=lambda_role.arn,
+        role=lambda_role(conf, dynamo_table).arn,
         runtime="python3.11",
         layers=[dependencies_layer.arn],
         code=pulumi.asset.AssetArchive(
